@@ -1,0 +1,64 @@
+---
+- hosts: all
+  become: yes
+  tasks:
+    - name: Disable swap
+      command: swapoff -a
+
+    - name: Remove swap fstab entry
+      mount:
+        src: /swap.img
+        path: none
+        fstype: swap
+        state: absent
+
+    - name: Add GPG key for k8s source
+      apt_key:
+        url: https://packages.cloud.google.com/apt/doc/apt-key.gpg
+        state: present
+
+    - name: Configure k8s source
+      apt_repository:
+        repo: deb http://apt.kubernetes.io/ kubernetes-xenial main
+        filename: kubernetes
+        update_cache: yes
+        state: present
+
+    - name: Install docker and k8s
+      apt:
+        pkg:
+        - docker.io
+        - kubeadm=1.21.1-00
+        - kubelet=1.21.1-00
+        - kubectl=1.21.1-00
+        state: present
+
+    - name: Prevent kubeadm from being upgraded
+      dpkg_selections:
+        name: kubeadm 
+        selection: hold
+
+    - name: Prevent kubelet from being upgraded
+      dpkg_selections:
+        name: kubelet 
+        selection: hold
+
+    - name: Prevent kubectl from being upgraded
+      dpkg_selections:
+        name: kubectl
+        selection: hold
+
+    - name: Copy docker daemon.json config
+      copy:
+        src: files/daemon.json
+        dest: /etc/docker/daemon.json
+      notify:
+      - Restart docker
+
+  handlers:
+    - name: Restart docker
+      systemd:
+        name: docker
+        enabled: yes
+        daemon_reload: yes
+        state: restarted
